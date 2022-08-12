@@ -1,94 +1,121 @@
-import numpy as np
 import pandas as pd
+import numpy as np
 
-'''
-We have a phenotypic spreadsheet with multiple visit dates per participant. We also have a spreadsheet with multiple
-tau pet values for (some) participants. The goal is to find each participant's baseline visit data from the phenotypic
-file, and then find a tau pet value that was collected within one year.
-'''
+from pathlib import Path
 
-# load baseline phenotypic data
-pheno = pd.read_csv('/Users/natashaclarke/Documents/SIMEXP/cwas_neuro_sandbox/adni_cwas/adni_spreadsheet.csv', index_col=0, header=0)
+# load data
+adni_data = Path(__file__).parent.parent / 'data' / 'adni_spreadsheet.csv'
+tau_data = Path(__file__).parent.parent / 'data' / 'UCBERKELEYAV1451_04_26_22.csv'
 
-# keep only the variables of interest
-pheno = pheno.filter(['Subject ID','Phase','Sex','Research Group', 'Visit','Study Date','Age'], axis=1)
+# functions
+def get_baselines(file):
 
-# convert 'study date' to 'session' in datetime format, to match other spreadsheets
-pheno['session'] = pd.to_datetime(pheno['Study Date'])
+    ''' Load multiple visits for adni participants and return a df with only baselines '''
 
-# pull out only the subject id and asign it to the index
-pheno_subj = []
-for i in pheno['Subject ID']:
-    subj = i.split('_')[2].lstrip("0") # remove leading zeros since it won't match ADNI IDs
-    pheno_subj.append(subj)
+    # load baseline phenotypic data
+    pheno = pd.read_csv(file, index_col=0, header=0)
+
+    # keep only the variables of interest
+    pheno = pheno.filter(['Subject ID','Phase','Sex','Research Group', 'Visit','Study Date','Age'], axis=1)
+
+    # convert 'study date' to 'session' in datetime format, to match other spreadsheets
+    pheno['session'] = pd.to_datetime(pheno['Study Date'])
     
-pheno.index = pheno_subj
-pheno.rename_axis('RID',inplace=True)
-pheno.index = pheno.index.astype('int64')
+    # pull out only the subject id and asign it to the index
+    pheno_subj = []
+    for i in pheno['Subject ID']:
+        subj = i.split('_')[2].lstrip("0") # remove leading zeros since it won't match ADNI IDs
+        pheno_subj.append(subj)
+    
+    pheno.index = pheno_subj
+    pheno.rename_axis('RID',inplace=True)
+    pheno.index = pheno.index.astype('int64')
+    
+    # separate patients and controls, because (in theory) we can use any control visit as baseline, but
+    # for patients we want their actual baseline data
+    patient_diagnoses = ['AD', 'EMCI', 'LMCI', 'MCI', 'SMC']
+    patient_df = pheno[pheno['Research Group'].isin(patient_diagnoses)] # df of patient diagnoses
 
-# separate patients and controls, because (in theory) we can use any control visit as baseline, but
-# for patients we want their actual baseline data
-ps = ['AD', 'EMCI', 'LMCI', 'MCI', 'SMC']
-pdf = pheno[pheno['Research Group'].isin(ps)] # df of patient diagnoses
+    control_df = pheno.loc[pheno['Research Group'] == 'CN'] # df of control diagnoses
 
-cdf = pheno.loc[pheno['Research Group'] == 'CN'] # df of control diagnoses
-
-# I think these visits are acceptable as baseline data, i.e. actual baseline +/-3 months, excluding
-# any initial visits where patient continued from a previous phase
-p_visits = ['ADNI Screening','ADNI2 Month 3 MRI-New Pt', 'ADNI2 Screening MRI-New Pt', 
+    # I think these visits are acceptable as baseline data, i.e. actual baseline +/-3 months, excluding
+    # any initial visits where patient continued from a previous phase
+    bl_visits = ['ADNI Screening','ADNI2 Month 3 MRI-New Pt', 'ADNI2 Screening MRI-New Pt', 
                    'ADNIGO Month 3 MRI','ADNIGO Screening MRI']
 
-pdf_bl = pdf[pdf['Visit'].isin(p_visits)]
+    patient_df_bl = patient_df[patient_df['Visit'].isin(bl_visits)]
+    
+    # rejoin the patients to the controls
+    new_df = pd.concat([control_df,patient_df_bl])
+    
+    # select the earliest visit available for each participant
+    new_df.sort_values(['Subject ID', 'Age'], inplace=True) # sort by age
+    baseline_df = new_df[~new_df.duplicated(['Subject ID'], keep='first')] # select the first row
+    
+    # sort df by index
+    baseline_df.sort_values(by='RID', inplace=True)
+    
+    # calculate window for acceptable biomarker data, currently +- 12months
+    baseline_df.loc[:,('date_lower')] = baseline_df.loc[:,('session')] - pd.DateOffset(months=12)
+    baseline_df.loc[:,('date_upper')] = baseline_df.loc[:,('session')] + pd.DateOffset(months=12)
 
-# rejoin the patients to the controls
-new_df = pd.concat([cdf,pdf_bl])
+    return (baseline_df)
 
-# select the earliest visit available for each participant
-new_df.sort_values(['Subject ID', 'Age'], inplace=True) # sort by age
-baseline = new_df[~new_df.duplicated(['Subject ID'], keep='first')] # select the first row
+def get_tau(file):
 
-# calculate window for acceptable biomarker data, currently +- 12months. This throws an error but I'm
-# not sure of an alternative?
-baseline['date_lower'] = baseline['session'] - pd.DateOffset(months=12)
-baseline['date_upper'] = baseline['session'] + pd.DateOffset(months=12)
+    ''' Load tau data and return df '''
 
-# load flortaucipir spreadsheet
-tau_df = pd.read_csv('/Users/natashaclarke/Documents/SIMEXP/cwas_neuro_sandbox/adni_cwas/UCBERKELEYAV1451_04_26_22.csv', index_col=0, header=0, low_memory=False)
+    # load flortaucipir spreadsheet
+    tau_df = pd.read_csv(file, index_col=0, header=0, low_memory=False)
 
-# keep only relevant columns
-tau_df = tau_df.filter(['EXAMDATE','META_TEMPORAL_SUVR'], axis=1)
+    # keep only relevant columns
+    tau_df = tau_df.filter(['EXAMDATE','META_TEMPORAL_SUVR'], axis=1)
 
-# convert to datetime
-tau_df['EXAMDATE'] = pd.to_datetime(tau_df['EXAMDATE'])
+    # convert to datetime
+    tau_df['EXAMDATE'] = pd.to_datetime(tau_df['EXAMDATE'])
 
-# sort both dfs by index, and tau df also by date. Also throws an error
-baseline.sort_values(by='RID', inplace=True)
-tau_df.sort_values(by=['RID', 'EXAMDATE'],inplace=True)
+    # sort tau df by index and date. Also throws an error
+    tau_df.sort_values(by=['RID', 'EXAMDATE'],inplace=True)
+    
+    return (tau_df)
 
-# group subjects in the tau df, look them up in the baseline df, and if they match return the tau
-# value closest to the session date in baseline. Return a list of dfs, one per subject. This seems
-# a silly and expensive way to do this! But, I ran into all sorts of problems with the datetime format
-# and this is the only way I figured it out...
-dfs = []
-for i, grp in tau_df.groupby(level='RID'):
-    for subject, session in zip(baseline.index, baseline.session):
-        if i == subject:
-            df = grp
-            df.set_index('EXAMDATE', inplace=True)
-            tau = pd.DataFrame(df['META_TEMPORAL_SUVR'][df.index[[df.index.get_loc(session, method='nearest')]]])
-            tau['EXAMDATE'] = tau.index
-            tau.index = [subject]
-            tau.rename_axis('RID',inplace=True)
-            dfs.append(tau)
+def match_baseline_tau(baseline_df, tau_df):
+    
+    '''
+    Group subjects in the tau df, look them up in the baseline df, and if they match return the tau
+    value closest to the session date in baseline. Return a list of dfs, one per subject, merge into
+    baseline df, and then keep only those within a 12 month window. This seems a silly and expensive way 
+    to do this! But, I ran into all sorts of problems with the datetime format and this is the only way 
+    I figured it out...
+    '''
+    
+    tau_dfs_list = []
+    for tau_id, group in tau_df.groupby(level='RID'):
+        for baseline_id, session in zip(baseline_df.index, baseline_df.session):
+            if tau_id == baseline_id:
+                participant_df = group
+                participant_df.set_index('EXAMDATE', inplace=True)
+                participant_tau = pd.DataFrame(participant_df['META_TEMPORAL_SUVR'][participant_df.index[[participant_df.index.get_loc(session, method='nearest')]]])
+                participant_tau['EXAMDATE'] = participant_tau.index
+                participant_tau.index = [baseline_id]
+                participant_tau.rename_axis('RID',inplace=True)
+                tau_dfs_list.append(participant_tau)
+                
+    # concatenate individual tau dfs
+    master_tau = pd.concat(tau_dfs_list)
+    
+    # merge tau data into baseline df
+    baseline_df = baseline_df.join(master_tau)
+    
+    # create a new df with only tau values that were collected within a 12month window of the baseline visit
+    baseline_tau = baseline_df[(baseline_df.EXAMDATE > baseline_df.date_lower) & (baseline_df.EXAMDATE < baseline_df.date_upper)]
+                
+    return (baseline_tau)
 
-# concatenate individual tau dfs
-master_tau = pd.concat(dfs)
+# run functions
+baseline_df = get_baselines(adni_data)
+tau_df = get_tau(tau_data)
+baseline_tau = match_baseline_tau(baseline_df, tau_df)
 
-# merge tau data into baseline df
-baseline = baseline.join(master_tau)
-
-# create a new df with only tau values that were collected within a 12month window of the baseline visit
-baseline_tau = baseline[(baseline.EXAMDATE > baseline.date_lower) & (baseline.EXAMDATE < baseline.date_upper)]
-
-# save df
-baseline_tau.to_csv('/Users/natashaclarke/Documents/SIMEXP/cwas_neuro_sandbox/adni_cwas/baseline_tau.csv')
+# save baseline and matched tau data in data directory
+baseline_tau.to_csv(Path("__file__").parent.parent / 'data' / 'baseline_tau.csv')

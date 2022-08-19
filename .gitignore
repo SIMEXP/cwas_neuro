@@ -77,6 +77,8 @@ target/
 # Jupyter Notebook
 .ipynb_checkpoints
 get_tau_pet_DRAFT.ipynb
+biomarker_thresholding_DRAFT.ipynb
+get_baseline_biomarkers_DRAFT.ipynb
 
 # IPython
 profile_default/
@@ -132,3 +134,4 @@ dmypy.json
 
 # Other
 data/
+.DS_Store

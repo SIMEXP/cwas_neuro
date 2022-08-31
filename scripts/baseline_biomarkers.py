@@ -58,8 +58,8 @@ def get_baselines(file):
     baseline_df.sort_values(by='RID', inplace=True)
     
     # calculate window for acceptable biomarker data, currently +- 12months
-    baseline_df.loc[:,('date_lower')] = baseline_df.loc[:,('session')] - pd.DateOffset(months=12)
-    baseline_df.loc[:,('date_upper')] = baseline_df.loc[:,('session')] + pd.DateOffset(months=12)
+    baseline_df.loc[:,('date_lower')] = baseline_df.loc[:,('session')] - pd.DateOffset(months=18)
+    baseline_df.loc[:,('date_upper')] = baseline_df.loc[:,('session')] + pd.DateOffset(months=18)
 
     return (baseline_df)
 
@@ -170,4 +170,4 @@ if __name__ == '__main__':
              data_frames)
     
     # save baseline and matched biomarker data in data directory
-    master_biomarkers.to_csv(Path("__file__").resolve().parents[1] / 'data' / 'master_biomarkersVS.csv')
+    master_biomarkers.to_csv(Path("__file__").resolve().parents[1] / 'data' / 'master_biomarkers.csv')

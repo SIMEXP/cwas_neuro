@@ -76,9 +76,9 @@ target/
 
 # Jupyter Notebook
 .ipynb_checkpoints
-get_tau_pet_DRAFT.ipynb
 biomarker_thresholding_DRAFT.ipynb
-get_baseline_biomarkers_DRAFT.ipynb
+baseline_biomarkers_DRAFT.ipynb
+generate_connectomes_DRAFT.ipynb
 
 # IPython
 profile_default/

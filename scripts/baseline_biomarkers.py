@@ -6,9 +6,9 @@ from pathlib import Path
 
 # paths to files
 
-adni_data = Path("__file__").resolve().parents[1] / 'data' / 'adni_spreadsheet.csv'
-tau_data = Path("__file__").resolve().parents[1] / 'data' / 'UCBERKELEYAV1451_04_26_22.csv'
-other_biomarker_data = Path("__file__").resolve().parents[1] / 'data' / 'ADNIMERGE.csv'
+adni_data = Path("__file__").resolve().parent / 'data' / 'adni_spreadsheet.csv'
+tau_data = Path("__file__").resolve().parent / 'data' / 'UCBERKELEYAV1451_04_26_22.csv'
+other_biomarker_data = Path("__file__").resolve().parent / 'data' / 'ADNIMERGE.csv'
 
 # functions
 
@@ -170,4 +170,4 @@ if __name__ == '__main__':
              data_frames)
     
     # save baseline and matched biomarker data in data directory
-    master_biomarkers.to_csv(Path("__file__").resolve().parents[1] / 'data' / 'master_biomarkers.csv')
+    master_biomarkers.to_csv(Path("__file__").resolve().parent / 'data' / 'master_biomarkers.csv')

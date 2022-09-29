@@ -79,6 +79,7 @@ target/
 biomarker_thresholding_DRAFT.ipynb
 baseline_biomarkers_DRAFT.ipynb
 generate_connectomes_DRAFT.ipynb
+afc_python_DRAFT.ipynb
 
 # IPython
 profile_default/

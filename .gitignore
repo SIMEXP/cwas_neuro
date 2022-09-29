@@ -137,3 +137,4 @@ dmypy.json
 data/
 .DS_Store
 nilearn_cache/joblib
+octave-workspace

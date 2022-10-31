@@ -2,3 +2,5 @@ nibabel==3.2.1
 nilearn==0.9.2
 numpy==1.23.1
 pandas==1.4.3
+matplotlib==3.6.1
+notebook==6.4.12

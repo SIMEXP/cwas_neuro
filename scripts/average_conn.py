@@ -1,3 +1,5 @@
+import numpy as np
+
 def correct_mean_var(tseries):
 
     '''
@@ -26,7 +28,7 @@ def correct_mean_var(tseries):
     return (tseries_n)
 
 
-    def build_size_roi(mask):
+def build_size_roi(mask, labels_roi):
 
     '''
     Extract labels and size of ROIs given a mask. Adapted from:
@@ -43,8 +45,6 @@ def correct_mean_var(tseries):
 
     LABELS_ROI: (vector) LABELS_ROI(I) is the label of region I.
     '''
-    labels_roi = np.unique(mask)
-    labels_roi = labels_roi[labels_roi!=0]
 
     nb_roi = len(labels_roi)
     size_roi = np.zeros([nb_roi,1])
@@ -52,10 +52,10 @@ def correct_mean_var(tseries):
     for num_r in range(nb_roi):
         size_roi[num_r] = np.count_nonzero(mask==labels_roi[num_r])
 
-    return (size_roi, labels_roi)
+    return size_roi
 
 
-    def mat2lvec(mat):
+def mat2lvec(mat):
 
     '''
     Convert a symmetric matrix into a vector (diagonal elements included). Adapted from:

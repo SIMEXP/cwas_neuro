@@ -4,6 +4,11 @@ from nibabel import Nifti1Image
 from nilearn.maskers import NiftiMasker
 from nilearn.image import resample_to_img
 from nilearn.maskers import NiftiLabelsMasker
+from nilearn.masking import compute_multi_epi_mask
+from nilearn.datasets import fetch_icbm152_brain_gm_mask
+from nilearn.image import resample_to_img
+from nilearn.image import math_img
+
 
 
 
@@ -61,7 +66,17 @@ def build_size_roi(mask, labels_roi):
 
     return size_roi
 
-
+def build_combined_mask(imgs):
+    mask_epi = compute_multi_epi_mask(imgs, lower_cutoff=0.2, upper_cutoff=0.85, connected=True, 
+                       opening=2, threshold=0.5, target_affine=None, target_shape=None, 
+                       exclude_zeros=False, n_jobs=1, memory=None, verbose=0)
+    
+    mask_mni = fetch_icbm152_brain_gm_mask()
+    mask_mni = resample_to_img(source_img=mask_mni, target_img=imgs[0], interpolation='nearest')
+    
+    mask_combined = math_img('img1 & img2', img1=mask_epi, img2=mask_mni)
+    
+    return mask_combined
 
 def _simulate_img():
     """ Simulate data with one "spot"
@@ -109,4 +124,4 @@ def _average_conn(img, mask, parcels, confounds=None, smoothing_fwhm=None):
     mask_empty = (size_parcels == 0) | (size_parcels == 1)
     afc = ((size_parcels * size_parcels) * var_parcels - size_parcels) / (size_parcels * (size_parcels - 1))
     afc[mask_empty] = 0
-    return afc
+    return afc, size_parcels

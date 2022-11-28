@@ -6,6 +6,16 @@ from nilearn.masking import compute_multi_epi_mask
 from nilearn.image import resample_to_img, math_img
 from nilearn.maskers import NiftiMasker, NiftiLabelsMasker
 
+def average_conn(imgs, mask_grey, parcel, confounds=None, **kwargs):
+    """ Compute average connectivity within parcels.""" 
+    mask_brain = _mask_brain(imgs, mask_grey, **kwargs)
+    parcel_brain, parcel_voxel = _parcel_brain(parcel, mask_brain)
+    # Need to properly loop over datasets
+    img_n, time_series_voxel = _load_voxel_data(mask_brain, imgs[0], confounds[0])
+    time_series, masker_parcels = _compute_tseries(parcel_brain, mask_brain, img_n)
+    afc, size_parcels = _compute_afc(time_series, masker_parcels, parcel_voxel)
+    return afc  
+
 
 def _mask_brain(imgs, mask_grey, **kwargs):
     """Generate a brain mask combining fMRI data with a grey matter segmentation."""

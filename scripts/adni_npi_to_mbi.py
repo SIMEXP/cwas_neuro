@@ -1,7 +1,7 @@
 import pandas as pd
 from pathlib import Path
 
-## Load NPIQ or NPI scores and convert to MBI framework
+## Load NPIQ or NPI scores for ADNI and convert to MBI framework
 ## Domains: https://adni.bitbucket.io/reference/npi.html
 
 
@@ -21,8 +21,8 @@ def _mbi_conversion(df):
         "social_inappropriateness",
         "abnormal_perception",
     ]
-    df["MBI_total_score"] = df[mbi_domains].sum(axis=1)
-    df["mbi_status"] = (df["MBI_total_score"] >= 1).astype(int)
+    df["mbi_total_score"] = df[mbi_domains].sum(axis=1)
+    df["mbi_status"] = (df["mbi_total_score"] >= 1).astype(int)
 
     mbi_columns = [
         "RID",
@@ -32,7 +32,7 @@ def _mbi_conversion(df):
         "impulse_dyscontrol",
         "social_inappropriateness",
         "abnormal_perception",
-        "MBI_total_score",
+        "mbi_total_score",
         "mbi_status",
     ]
     mbi_df = df[mbi_columns].copy()
@@ -43,9 +43,9 @@ def _mbi_conversion(df):
 root_p = Path("__file__").resolve().parents[1] / "data" / "adni"
 
 # Load NPI or NPI-Q scores
-npi_df = pd.read_csv(root_p / "NPIQ_22Aug2023.csv")
+npi_df = pd.read_csv(root_p / "NPI_22Aug2023.csv")
 
 mbi_df = _mbi_conversion(npi_df)
 
 # Save results - make sure to change name
-mbi_df.to_csv(root_p / "adni_npiq_mbi_status_20230822.csv", index=False)
+mbi_df.to_csv(root_p / "adni_npi_mbi_status_20230829.csv", index=False)

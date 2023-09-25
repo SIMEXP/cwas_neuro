@@ -25,14 +25,12 @@ def _load_connectomes(data_dir):
     return connectomes
 
 
-def _pick_random_connections(pi):
-    # Calculate the number of connections to select based on pi
-    num_connections = len(connectomes[0])
-    num_selected_connections = int(pi * num_connections)
+def _select_subjects(connectomes, N):
+    total_subjects = connectomes.shape[0]
+    selected_subjects_indices = random.sample(range(total_subjects), N)
+    selected_connectomes = connectomes[selected_subjects_indices]
 
-    # Randomly select connections
-    random_connections = random.sample(range(num_connections), num_selected_connections)
-    return random_connections
+    return selected_connectomes
 
 
 def _split_subjects(connectomes):
@@ -53,12 +51,37 @@ def _split_subjects(connectomes):
     return group1_connectomes, group2_connectomes
 
 
-def _run_cwas(n_connections, group1, group2):
+def _pick_random_connections(pi, connectomes):
+    # Calculate the number of connections to select based on pi
+    num_connections = len(connectomes[0])
+    num_selected_connections = int(pi * num_connections)
+
+    # Randomly select connections
+    random_connections = random.sample(range(num_connections), num_selected_connections)
+    return random_connections
+
+
+def _modify_connections(
+    random_connections, selected_subjects_connectomes, group2_connectomes
+):
+    for i in random_connections:
+        std_i = np.std(selected_subjects_connectomes[:, i])
+        for subject_idx in range(len(group2_connectomes)):
+            group2_connectomes[subject_idx][i] = (
+                group2_connectomes[subject_idx][i] + d * std_i
+            )
+
+    return group2_connectomes
+
+
+def _run_cwas(group1_connectomes, group2_modified):
+    n_connections = group1_connectomes.shape[1]
+
     pvals = []
     for connection_i in range(n_connections):
         # Extract the connectivity data for this connection
-        connectivity_i_group1 = group1[:, connection_i]
-        connectivity_i_group2 = group2[:, connection_i]
+        connectivity_i_group1 = group1_connectomes[:, connection_i]
+        connectivity_i_group2 = group2_modified[:, connection_i]
 
         # Stack the connectivity data
         connectivity_data = np.hstack((connectivity_i_group1, connectivity_i_group2))
@@ -79,89 +102,84 @@ def _run_cwas(n_connections, group1, group2):
     return np.array(pvals).flatten()
 
 
-def _simulate_power(N, pi, d, q, target_power, num_iterations, connectomes):
-    sensitivities = []
-    specificities = []
-    achieved_power = 0
-    for _ in range(num_iterations):
-        # Randomly select N subjects
-        total_subjects = connectomes.shape[0]
-        selected_subjects = random.sample(range(total_subjects), N)
+def _apply_fdr(pvals, q):
+    n_connections = group1_connectomes.shape[1]
+    rejected, corrected_pvals = fdrcorrection(pvals, alpha=q)
 
-        # Step 1: Pick pi% of connections at random
-        random_connections = _pick_random_connections(pi)
+    # Calculate the number of true positives (connections correctly detected)
+    true_positives = np.sum(rejected[:n_connections])
+    if true_positives > 0:
+        sensitivity = true_positives / n_connections
+    else:
+        sensitivity = np.nan
 
-        # Step 2: Randomly split N selected subjects into 2 groups.
-        group1, group2 = _split_subjects(connectomes[selected_subjects])
+    # Calculate specificity (proportion of true negatives among condition negatives)
+    false_positives = np.sum(rejected[n_connections:])
+    true_negatives = len(pvals) - n_connections - false_positives
+    if true_negatives > 0:
+        specificity = true_negatives / (len(pvals) - n_connections)
+    else:
+        specificity = np.nan
 
-        # Step 3: Iterate through randomly picked connections for subjects in group2 and modify
-        for i in random_connections:
-            mean_i = np.mean(group2[:, i])
-            std_i = np.std(group2[:, i])
-            for subject_idx in range(len(group2)):
-                group2[subject_idx][i] = group2[subject_idx][i] + d * std_i
-
-        # Step 4: Run CWAS between group1 and group2
-        n_connections = group1.shape[1]
-        pvals = _run_cwas(n_connections, group1, group2)
-
-        # Step 5: Apply FDR Correction
-        rejected, _ = fdrcorrection(pvals, alpha=q)
-
-        # Calculate the number of true positives (connections correctly detected)
-        true_positives = np.sum(rejected[:n_connections])
-
-        if true_positives > 0:
-            sensitivity = true_positives / n_connections
-        else:
-            sensitivity = np.nan
-
-        # Calculate specificity (proportion of true negatives among condition negatives)
-        false_positives = np.sum(rejected[n_connections:])
-        true_negatives = len(pvals) - n_connections - false_positives
-        if true_negatives > 0:
-            specificity = true_negatives / (len(pvals) - n_connections)
-        else:
-            specificity = np.nan
-
-        sensitivities.append(sensitivity)
-        specificities.append(specificity)
-
-        # Calculate the power as the proportion of true positives
-        power = true_positives / n_connections
-
-        if power >= target_power:
-            achieved_power += 1
-
-    # Calculate averages
-    mean_sensitivity = np.mean(sensitivities)
-    mean_specificity = np.mean(specificities)
-
-    estimated_power = achieved_power / num_iterations
-
-    return mean_sensitivity, mean_specificity, estimated_power
+    return corrected_pvals, sensitivity, specificity
 
 
-if __name__ == "__main__":
-    # Load control connectomes from ABIDE site UM
-    abide_dir = Path("")
-    connectomes = _load_connectomes(abide_dir)
+# Load control connectomes from ABIDE site UM
+abide_dir = Path("")
+connectomes = _load_connectomes(abide_dir)
 
-    # Set values
-    N = 74  # sample size - must be an even number to split into 2 groups
-    pi = 0.80  # percentage of randomly selected connections to modify
-    d = 0.80  # effect size
-    q = 0.05  # fdr threshold
-    target_power = 0.95
-    num_iterations = 100
+# Set values
+N = 50  # sample size - must be an even number to split into 2 groups
+pi = 0.10  # percentage of randomly selected connections to modify
+d = 0.30  # effect size
+q = 0.05  # fdr threshold
+target_power = 0.95
+num_iterations = 100
 
-    # Generate synthetic connectomes
+sensitivities = []
+specificities = []
+correct_rejections = 0
+for iteration in range(num_iterations):
+    # Randomly select N subjects
+    selected_subjects_connectomes = _select_subjects(connectomes, N)
 
-    mean_sensitivity, mean_specificity, estimated_power = _simulate_power(
-        N, pi, d, q, target_power, num_iterations, connectomes
+    # Step 1: Randomly split N selected subjects into 2 groups.
+    group1_connectomes, group2_connectomes = _split_subjects(
+        selected_subjects_connectomes
     )
 
-    print(
-        f"Estimated power to detect d={d} with N={N}: {estimated_power} "
-        f"with a mean sensitivity of {mean_sensitivity} and mean specificity {mean_specificity}"
+    # Step 2: Pick pi% of connections at random
+    random_connections = _pick_random_connections(pi, group2_connectomes)
+
+    # Step 3: Iterate through randomly picked connections for subjects in group2 and modify
+    group2_modified = _modify_connections(
+        random_connections, selected_subjects_connectomes, group2_connectomes
     )
+
+    # Step 4: Run CWAS between group1 and group2
+    pvals = _run_cwas(group1_connectomes, group2_modified)
+
+    # Step 5: Apply FDR Correction
+    corrected_pvals, sensitivity, specificity = _apply_fdr(pvals, q)
+
+    sensitivities.append(sensitivity)
+    specificities.append(specificity)
+
+    # If null hypothesis rejected, plus 1
+    if np.any(corrected_pvals < q):
+        correct_rejections += 1
+
+
+# Calculate the estimated statistical power
+power = correct_rejections / num_iterations
+
+print(
+    f"Estimated power to detect d={d} with N={N}: {power},"
+    f" with a mean sensitivity of {np.mean(sensitivities)} and mean specificity {np.mean(specificities)}"
+)
+
+if power >= target_power:
+    print(f"Estimated power is equal to or greater than {target_power}!")
+
+else:
+    print(f"Target power of {target_power} not reached.")

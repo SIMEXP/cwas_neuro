@@ -6,7 +6,6 @@ import math
 
 from statsmodels.stats.multitest import fdrcorrection
 from sklearn.preprocessing import LabelEncoder
-from pathlib import Path
 
 
 def random_sample(df, N):
@@ -166,21 +165,6 @@ def apply_fdr(group1_conn, conections_to_modify, pval_list, q):
 
 
 def calculate_theta(N, d):
-    """
-    Calculate theta (effect size for N = 1) based on sample size (N) and effect size (d).
-
-    Parameters
-    ----------
-    N : int
-        Sample size.
-    d : float
-        Effect size.
-
-    Returns
-    -------
-    float
-        Theta (effect size for N = 1).
-    """
     # Calculate theta using the formula: theta = d / sqrt(N)
     theta = d / math.sqrt(N)
 
@@ -190,30 +174,6 @@ def calculate_theta(N, d):
 def summary(
     correct_rejected_count, sensitivity_list, specificity_list, d, N, num_sample
 ):
-    """
-    Generate a summary message with estimated statistical power, sensitivity, specificity, and theta (effect size for N = 1).
-
-    Parameters
-    ----------
-    correct_rejected_count : int
-        The number of correct rejections (connections detected as significant).
-    sensitivity_list : list[float]
-        A list of sensitivity values for multiple simulations.
-    specificity_list : list[float]
-        A list of specificity values for multiple simulations.
-    d : float
-        The effect size.
-    N : int
-        Sample size.
-    num_sample : int
-        Number of simulation iterations.
-
-    Returns
-    -------
-    str
-        A summary message with estimated power, sensitivity, specificity, and theta.
-
-    """
     # Calculate the estimated statistical power
     power = correct_rejected_count / num_sample
 

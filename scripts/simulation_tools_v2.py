@@ -52,6 +52,10 @@ def extract_data(sampled_df, group1, group2):
     return group1_site, group2_site, group1_conn, group2_conn
 
 
+def apply_modification(value, d, std_value):
+    return value + d * std_value
+
+
 def modify_group2(group1_conn, group2_conn, pi, d):
     # Calculate the total number of connections in the DataFrame
     total_conn = group2_conn.shape[1]
@@ -60,17 +64,19 @@ def modify_group2(group1_conn, group2_conn, pi, d):
     num_to_modify = int(total_conn * pi)
 
     # Randomly select the connections (columns) to modify
-    conections_to_modify = group2_conn.sample(n=num_to_modify, axis=1)
+    connections_to_modify = group2_conn.sample(n=num_to_modify, axis=1)
 
-    # Stack both groups vertically and calculate std
+    # Stack both groups vertically to calculate std
     combined_data = pd.concat([group1_conn, group2_conn], axis=0)
-    std = combined_data[conections_to_modify.columns].std()
+    # std = combined_data[connections_to_modify.columns].std()
 
     # Modify the selected columns in the second_half group using the combined standard deviation
-    for col in conections_to_modify.columns:
-        group2_conn[col] = group2_conn[col] + d * std[col]
+    group2_modified = group2_conn.copy()
+    for col in connections_to_modify.columns:
+        std = combined_data[col].std()
+        group2_modified.loc[:, col] = group2_modified.loc[:, col] + d * std
 
-    return conections_to_modify, group2_conn
+    return connections_to_modify, group2_modified
 
 
 def run_cwas(group1_conn, group2_modified, group1_site, group2_site):
@@ -134,7 +140,7 @@ def run_simulation(path_conn, N, pi, d):
     # Step 4: Run CWAS
     pval_list = run_cwas(group1_conn, group2_modified, group1_site, group2_site)
 
-    return group1_conn, connections_to_modify, pval_list
+    return group1_conn, group2_conn, group2_modified, connections_to_modify, pval_list
 
 
 def apply_fdr(group1_conn, conections_to_modify, pval_list, q):
@@ -187,3 +193,37 @@ def summary(
     )
 
     return summary_message
+
+
+def run_simulation_experiment(path_conn, N, pi, d, q, num_sample):
+    sensitivity_list = []
+    specificity_list = []
+    correct_rejected_count = 0
+
+    for sample in range(num_sample):
+        # Load connectomes and perform steps 1-4 of simulation
+        (
+            group1_conn,
+            group2_conn,
+            group2_modified,
+            connections_to_modify,
+            pval_list,
+        ) = run_simulation(path_conn, N, pi, d)
+
+        # Step 5: Apply FDR correction
+        corrected_pval_list, sensitivity, specificity = apply_fdr(
+            group1_conn, connections_to_modify, pval_list, q
+        )
+
+        sensitivity_list.append(sensitivity)
+        specificity_list.append(specificity)
+
+        # If null hypothesis rejected, plus 1
+        if np.any(corrected_pval_list < q):
+            correct_rejected_count += 1
+
+    result = summary(
+        correct_rejected_count, sensitivity_list, specificity_list, d, N, num_sample
+    )
+
+    return group2_conn, group2_modified, connections_to_modify, result

@@ -86,13 +86,11 @@ for index, row in merged_df.iterrows():
 
 # Iterate through the subject dictionary, and average arrays if >1. Otherwise, save array
 for participant_id, data in subject_dict.items():
-    # site_name = data["site_name"]
     site_name = re.sub(r"[^a-zA-Z0-9]", "", str(data["site_name"]))
     arrays = data["arrays"]
 
     if len(arrays) > 1:
         average_array = np.mean(arrays, axis=0)
-
         output_filename = (
             output_dir
             / f"sub-{participant_id}_{site_name}_average_atlas-MIST_desc-64_connectome.npy"
@@ -105,13 +103,11 @@ for participant_id, data in subject_dict.items():
             output_dir
             / f"sub-{participant_id}_{site_name}_atlas-MIST_desc-64_connectome.npy"
         )
-        np.save(output_filename, arrays)
+        np.save(output_filename, arrays[0])
 
 # Some print statements to ensure the correct number of connectomes are saved (also ran without averaging to check N)
 num_rows_pass_qc = (merged_df["pass_all_qc"] == True).sum()
-print(f"Number of rows where pass_all_qc is True: {num_rows_pass_qc}")
+# print(f"Number of rows where pass_all_qc is True: {num_rows_pass_qc}")
 
 num_subjects_with_qc = merged_df.groupby("participant_id")["pass_all_qc"].any().sum()
-print(
-    f"Number of subjects with at least one pass_all_qc == True: {num_subjects_with_qc}"
-)
+# print(f"Number of subjects with at least one pass_all_qc == True: {num_subjects_with_qc}")

@@ -1,3 +1,4 @@
+import re
 import h5py
 import numpy as np
 import pandas as pd
@@ -31,7 +32,7 @@ def get_subject_conn(hdf5_dir, subject_id, run):
     return data
 
 
-root_p = Path("")
+root_p = Path("/home/neuromod/ad_sz/data/abide")
 pheno_p = root_p / "Phenotypic_V1_0b.csv"
 qc_dir = root_p / "abide1_giga-auto-qc-0.3.1"
 conn_p = root_p / "abide1_connectomes-0.4.1_MIST"
@@ -85,7 +86,8 @@ for index, row in merged_df.iterrows():
 
 # Iterate through the subject dictionary, and average arrays if >1. Otherwise, save array
 for participant_id, data in subject_dict.items():
-    site_name = data["site_name"]
+    # site_name = data["site_name"]
+    site_name = re.sub(r"[^a-zA-Z0-9]", "", str(data["site_name"]))
     arrays = data["arrays"]
 
     if len(arrays) > 1:

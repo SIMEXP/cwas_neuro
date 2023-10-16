@@ -30,6 +30,12 @@ def split_sampled_df(sampled_df):
     return group1, group2
 
 
+def fisher_transform(df):
+    df_transformed = np.arctanh(df)
+
+    return df_transformed
+
+
 def extract_data(sampled_df, group1, group2):
     # Extract the "site" columns
     group1_site = group1["Site"]
@@ -66,11 +72,10 @@ def modify_group2(group1_conn, group2_conn, pi, d):
     # Randomly select the connections (columns) to modify
     connections_to_modify = group2_conn.sample(n=num_to_modify, axis=1)
 
-    # Stack both groups vertically to calculate std
+    # Stack both groups vertically for std claculation
     combined_data = pd.concat([group1_conn, group2_conn], axis=0)
-    # std = combined_data[connections_to_modify.columns].std()
 
-    # Modify the selected columns in the second_half group using the combined standard deviation
+    # Modify the selected columns in group2
     group2_modified = group2_conn.copy()
     for col in connections_to_modify.columns:
         std = combined_data[col].std()
@@ -118,12 +123,9 @@ def run_cwas(group1_conn, group2_modified, group1_site, group2_site):
     return pval_list
 
 
-def run_simulation(path_conn, N, pi, d):
-    # Load control connectomes from ABIDE
-    df = pd.read_csv(path_conn)
-
+def run_simulation(conn_df, N, pi, d):
     # Step 1: Randomly select N subjects
-    sampled_df = random_sample(df, N)
+    sampled_df = random_sample(conn_df, N)
 
     # Step 2: Randomly split N selected subjects into 2 groups
     group1, group2 = split_sampled_df(sampled_df)
@@ -143,25 +145,28 @@ def run_simulation(path_conn, N, pi, d):
     return group1_conn, group2_conn, group2_modified, connections_to_modify, pval_list
 
 
-def apply_fdr(group1_conn, conections_to_modify, pval_list, q):
+def apply_fdr(group1_conn, connections_to_modify, pval_list, q):
     connection_count = group1_conn.shape[1]
     rejected, corrected_pval_list = fdrcorrection(pval_list, alpha=q)
 
+    # Get a list of the modified connections
+    modified_conn_list = connections_to_modify.columns.tolist()
+    modified_conn_list = [int(conn) for conn in modified_conn_list]
+
     # Calculate the number of modified connections (condition positive), and non-modified connections (condition negative)
-    condition_positive = len(conections_to_modify)
+    condition_positive = len(modified_conn_list)
     condition_negative = connection_count - condition_positive
     true_positive_count = 0
     true_negative_count = 0
-    # Loop through each of the connections and check whether it has been modified or not
-    for connection_i in range(connection_count):
-        if connection_i in conections_to_modify:
-            # Connection has been modified, the null hypothesis should be rejected
-            if rejected[connection_i]:
-                true_positive_count = true_positive_count + 1
-        else:
-            # Connection has not been modified, the null hypothesis should not be rejected
-            if not (rejected[connection_i]):
-                true_negative_count = true_negative_count + 1
+
+    for connection in range(connection_count):
+        # Connection has been modified, the null hypothesis should be rejected
+        if connection in modified_conn_list and rejected[connection]:
+            true_positive_count += 1
+
+        # Connection has not been modified, the null hypothesis should not be rejected
+        elif connection not in modified_conn_list and not (rejected[connection]):
+            true_negative_count += 1
 
     # Calculate sensitivity and specificity
     sensitivity = true_positive_count / condition_positive
@@ -189,17 +194,19 @@ def summary(
     summary_message = (
         f"Estimated power to detect d={d} with N={N}: {power},"
         f" with a mean sensitivity of {round(np.mean(sensitivity_list), 2)} and mean specificity of {round(np.mean(specificity_list), 2)},"
-        f" theta (effect size for N=1): {theta}"
+        f" theta (effect size for N=1): {round(theta,2)}"
     )
 
     return summary_message
 
 
 def run_simulation_experiment(path_conn, N, pi, d, q, num_sample):
+    # Load control connectomes from ABIDE
+    conn_df = pd.read_csv(path_conn)
+
     sensitivity_list = []
     specificity_list = []
     correct_rejected_count = 0
-
     for sample in range(num_sample):
         # Load connectomes and perform steps 1-4 of simulation
         (
@@ -208,7 +215,7 @@ def run_simulation_experiment(path_conn, N, pi, d, q, num_sample):
             group2_modified,
             connections_to_modify,
             pval_list,
-        ) = run_simulation(path_conn, N, pi, d)
+        ) = run_simulation(conn_df, N, pi, d)
 
         # Step 5: Apply FDR correction
         corrected_pval_list, sensitivity, specificity = apply_fdr(

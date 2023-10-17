@@ -20,8 +20,8 @@ for connectome_path in connectome_file:
     subject = parts[0].split("-")[1]
     site = parts[1]
 
-    # Keep upper triangle and diagonal, and flatten
-    upper_indices = np.triu_indices_from(connectome, k=0)
+    # Keep upper triangle without the diagonal, and flatten
+    upper_indices = np.triu_indices_from(connectome, k=1)
     upper_connectome = connectome[upper_indices]
     upper_connectome_flat = upper_connectome.flatten()
 

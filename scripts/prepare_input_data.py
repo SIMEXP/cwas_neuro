@@ -4,7 +4,37 @@ import pandas as pd
 from pathlib import Path
 
 dataset_configs = {
-    "adni": {
+    "cobre": {
+        "connectome_path": "cobre_connectome-0.4.1_MIST_afc",
+        "no_session": False,
+        "subject_folder": False,
+    },
+    "cimaq": {
+        "connectome_path": "cimaq_connectome-0.4.1_MIST_afc",
+        "no_session": False,
+        "subject_folder": True,
+    },
+    "hcpep": {
+        "connectome_path": "hcp-ep_connectome-0.4.1",
+        "no_session": False,
+        "subject_folder": True,
+    },
+    "ds000030": {
+        "connectome_path": "ds000030_connectomes-0.4.1",
+        "no_session": True,
+        "subject_folder": False,
+    },
+    "oasis3": {
+        "connectome_path": "oasis3_connectomes-0.4.1",
+        "no_session": False,
+        "subject_folder": True,
+    },
+    "srpbs": {
+        "connectome_path": "srpbs_connectome-0.4.1",
+        "no_session": False,
+        "subject_folder": True,
+    },
+        "adni": {
         "connectome_path": "adni_connectome-0.4.1_MIST_afc",
         "no_session": False,
         "subject_folder": True,
@@ -202,8 +232,12 @@ def create_covariates_df(pheno_df):
 
 if __name__ == "__main__":
     conn_p = Path("/home/nclarke/scratch")
-    output_p = Path("/home/nclarke")
-    df = pd.read_csv("/home/nclarke/final_qc_pheno.tsv", sep="\t")
+    output_p = Path("/home/nclarke/ad_sz/data/input_data")
+    df = pd.read_csv("/home/nclarke/ad_sz/data/final_qc_pheno.tsv", sep="\t")
+
+    # Convert adni sessions to strings so can formulate paths correctly
+    mask = df["dataset"] == "adni"
+    df.loc[mask, "ses"] = pd.to_datetime(df.loc[mask, "ses"]).dt.strftime("%Y%m%d")
 
     if not output_p.exists():
         output_p.mkdir(parents=True, exist_ok=True)

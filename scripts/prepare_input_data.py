@@ -4,18 +4,8 @@ import pandas as pd
 from pathlib import Path
 
 dataset_configs = {
-    "cobre": {
-        "connectome_path": "cobre_connectome-0.4.1_MIST_afc",
-        "no_session": False,
-        "subject_folder": False,
-    },
-    "cimaq": {
-        "connectome_path": "cimaq_connectome-0.4.1_MIST_afc",
-        "no_session": False,
-        "subject_folder": True,
-    },
-    "hcpep": {
-        "connectome_path": "hcp-ep_connectome-0.4.1",
+    "adni": {
+        "connectome_path": "adni_connectome-0.4.1_MIST_afc",
         "no_session": False,
         "subject_folder": True,
     },
@@ -65,19 +55,23 @@ def connectome_to_edge_matrix(connectome):
 
 def process_connectomes(connectomes_by_participant):
     """
-    For multiple connectomes per participant, average them, apply Fisher z transform, and convert to an edge matrix.
+    Apply Fisher z transform, compute the global signal and convert to an edge matrix. For multiple connectomes per participant, connectomes are averaged first.
     """
     edges_matrix_dict = {}
+    global_signal_dict = {}
     for participant_id, connectomes in connectomes_by_participant.items():
         # Compute the mean connectome
         mean_connectome = np.mean(connectomes, axis=0)
         # Apply Fisher Z transformation
         transformed_connectome = np.arctanh(mean_connectome)
+        # Compute global signal (mean of the Z values)
+        global_signal = np.mean(transformed_connectome)
+        global_signal_dict[participant_id] = global_signal
         # Convert connectome to a marix for ComBat
         edges_matrix = connectome_to_edge_matrix(transformed_connectome)
         edges_matrix_dict[participant_id] = edges_matrix
 
-    return edges_matrix_dict
+    return edges_matrix_dict, global_signal_dict
 
 
 def matrix_dict_to_df(edges_matrix_dict):
@@ -136,27 +130,31 @@ def process_datasets(conn_p, df, dataset_name):
     edges_df = pd.DataFrame()
     # Process connectomes
     if connectomes_by_participant:
-        edges_matrix_dict = process_connectomes(connectomes_by_participant)
+        edges_matrix_dict, global_signal_dict = process_connectomes(
+            connectomes_by_participant
+        )
         edges_df = matrix_dict_to_df(edges_matrix_dict)
 
     # Convert the list of valid rows to a df
     valid_df = pd.DataFrame(valid_rows)
 
-    return edges_df, valid_df
+    return edges_df, valid_df, global_signal_dict
 
 
-def create_pheno_df(valid_df):
+def create_pheno_df(valid_df, global_signal_dict):
     # Group by 'participant_id' and aggregate, taking the first entry for variables that do not change (for this use case)
     aggregation_functions = {
         "sex": "first",
         "age": "first",
         "diagnosis": "first",
         "site": "first",
+        "dataset": "first",
         "mean_fd_scrubbed": "mean",  # Averaging mean framewise displacement across scans
         "group": "first",
     }
     pheno_df = valid_df.groupby("participant_id").agg(aggregation_functions)
-
+    # Add global signal to pheno_df
+    pheno_df["mean_conn"] = pheno_df.index.map(global_signal_dict)
     return pheno_df
 
 
@@ -203,11 +201,9 @@ def create_covariates_df(pheno_df):
 
 
 if __name__ == "__main__":
-    conn_p = Path("/home/neuromod/ad_sz/data")
-    output_p = Path("/home/neuromod/ad_sz/data/input_data")
-    df = pd.read_csv(
-        "/home/neuromod/wrangling-phenotype/outputs/final_qc_pheno.tsv", sep="\t"
-    )
+    conn_p = Path("/home/nclarke/scratch")
+    output_p = Path("/home/nclarke")
+    df = pd.read_csv("/home/nclarke/final_qc_pheno.tsv", sep="\t")
 
     if not output_p.exists():
         output_p.mkdir(parents=True, exist_ok=True)
@@ -215,8 +211,8 @@ if __name__ == "__main__":
     all_edges = []
     all_pheno = []
     for dataset in dataset_configs:
-        edges_df, valid_df = process_datasets(conn_p, df, dataset)
-        pheno_df = create_pheno_df(valid_df)
+        edges_df, valid_df, global_signal_dict = process_datasets(conn_p, df, dataset)
+        pheno_df = create_pheno_df(valid_df, global_signal_dict)
 
         # Collect data per dataset
         all_edges.append(edges_df)
@@ -229,7 +225,7 @@ if __name__ == "__main__":
     # One-hot encode columns
     combined_pheno_df = one_hot_encode_column(combined_pheno_df, "sex")
     combined_pheno_df = one_hot_encode_column(combined_pheno_df, "diagnosis")
-    combined_pheno_df = one_hot_encode_column_no_prefix(combined_pheno_df, "group")
+    combined_pheno_df = one_hot_encode_column(combined_pheno_df, "group")
 
     # Create covariates_df from pheno_df
     covariates_df = create_covariates_df(combined_pheno_df)
@@ -239,8 +235,8 @@ if __name__ == "__main__":
     combined_pheno_df.columns = [x.upper() for x in combined_pheno_df.columns]
 
     print("Shape of combined_edges_df = ", combined_edges_df.shape)
-    print("Shape of processed_covariates_df = ", covariates_df.shape)
-    print("Shape of pheno_hot_df = ", combined_pheno_df.shape)
+    print("Shape of covariates_df = ", covariates_df.shape)
+    print("Shape of combined_pheno_df = ", combined_pheno_df.shape)
 
     # Ensure order of data is identical and output
     combined_edges_df.sort_index().to_csv(
